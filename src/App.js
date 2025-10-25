@@ -309,15 +309,6 @@ const EmailDashboard = () => {
               {error}
             </div>
           )}
-
-          <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-xl p-4 mb-6 text-yellow-200 text-sm text-left">
-            <strong>Setup Required:</strong>
-            <ol className="mt-2 space-y-1 list-decimal list-inside">
-              <li>Replace YOUR_CLIENT_ID_HERE in the code</li>
-              <li>Enable Implicit Grant in Azure Portal</li>
-              <li>Add redirect URI: http://localhost:3000</li>
-            </ol>
-          </div>
           
           <button
             onClick={handleAddAccount}

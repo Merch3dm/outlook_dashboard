@@ -107,7 +107,12 @@ const EmailDashboard = () => {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
-        if (!userResponse.ok) throw new Error('Failed to fetch user profile');
+        if (!userResponse.ok) {
+          if (userResponse.status === 401) {
+            throw new Error('Authentication failed. Please try logging in again.');
+          }
+          throw new Error('Failed to fetch user profile');
+        }
         userData = await userResponse.json();
         userEmail = userData.mail || userData.userPrincipalName;
       }
@@ -117,17 +122,24 @@ const EmailDashboard = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!emailResponse.ok) throw new Error('Failed to fetch emails');
+      if (!emailResponse.ok) {
+        if (emailResponse.status === 401) {
+          throw new Error('Authentication failed. Please try logging in again.');
+        }
+        throw new Error('Failed to fetch emails');
+      }
+      
       const emailData = await emailResponse.json();
 
-      // Create new account object
+      // Create new account object with token expiry tracking
       const newAccount = {
-        id: Date.now(), // Use timestamp as unique ID
+        id: Date.now(),
         email: userEmail,
         token: token,
         color: accountColors[index % accountColors.length],
         unread: emailData.value.filter(e => !e.isRead).length,
-        addedAt: new Date().toISOString()
+        addedAt: new Date().toISOString(),
+        lastRefresh: new Date().toISOString()
       };
 
       // Format emails for display
@@ -169,7 +181,10 @@ const EmailDashboard = () => {
 
   const loadAllEmails = async (accountsList) => {
     setLoading(true);
+    setError('');
     const allEmails = [];
+    const validAccounts = [];
+    let hasExpiredTokens = false;
 
     for (const account of accountsList) {
       try {
@@ -178,6 +193,13 @@ const EmailDashboard = () => {
             'Authorization': `Bearer ${account.token}`
           }
         });
+
+        if (emailResponse.status === 401) {
+          // Token expired
+          console.error(`Token expired for ${account.email}`);
+          hasExpiredTokens = true;
+          continue;
+        }
 
         if (emailResponse.ok) {
           const emailData = await emailResponse.json();
@@ -200,17 +222,34 @@ const EmailDashboard = () => {
           
           // Update unread count
           account.unread = formattedEmails.filter(e => e.unread).length;
+          validAccounts.push(account);
+        } else {
+          console.error(`Failed to load emails for ${account.email}: ${emailResponse.status}`);
+          hasExpiredTokens = true;
         }
       } catch (err) {
         console.error(`Error loading emails for ${account.email}:`, err);
+        hasExpiredTokens = true;
       }
+    }
+
+    if (hasExpiredTokens) {
+      setError('Some accounts have expired sessions. Please remove and re-add them, or click "Logout All" and sign in again.');
     }
 
     // Sort all emails by date
     allEmails.sort((a, b) => new Date(b.receivedDateTime) - new Date(a.receivedDateTime));
     
     setEmails(allEmails);
-    setAccounts([...accountsList]);
+    
+    // Update accounts with valid ones only
+    if (validAccounts.length < accountsList.length) {
+      setAccounts(validAccounts);
+      localStorage.setItem('emailAccounts', JSON.stringify(validAccounts));
+    } else {
+      setAccounts([...accountsList]);
+    }
+    
     setLoading(false);
   };
 
